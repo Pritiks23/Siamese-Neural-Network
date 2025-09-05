@@ -8,7 +8,7 @@ Check me out here: https://pritiks23.github.io/Siamese-Neural-Network/
 This repository demonstrates a **Siamese neural network** for image similarity, fully implemented in-browser using **TensorFlow.js**. MobileNet serves as the shared backbone, converting images into high-dimensional embeddings for pairwise comparison.
 
 ## Architecture Overview
-<img width="700" height="300" alt="Screen Shot 2025-09-05 at 9 56 01 AM" src="https://github.com/user-attachments/assets/ee1bb62c-2d3e-4ff3-89bb-cb3e1191726e" />
+<img width="400" alt="Screen Shot 2025-09-05 at 9 56 01 AM" src="https://github.com/user-attachments/assets/ee1bb62c-2d3e-4ff3-89bb-cb3e1191726e" />
 1. **Shared Backbone (MobileNet v2.1)**  
    - Pre-trained convolutional feature extractor.
    - Outputs feature maps from the final convolutional layers.
