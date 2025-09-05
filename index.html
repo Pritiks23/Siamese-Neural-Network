@@ -1,0 +1,570 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Siamese Image Similarity — Demo</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <!-- TensorFlow.js and MobileNet -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.7.0/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.0/dist/mobilenet.min.js"></script>
+
+  <style>
+    /* Classic professional look */
+    :root{
+      --bg:#f6f8fa;
+      --card:#ffffff;
+      --muted:#6b7280;
+      --accent:#0b63ff;
+      --accent-2:#065fd4;
+      --glass: rgba(15,23,42,0.03);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+    }
+    body{
+      margin:0;
+      background: linear-gradient(180deg, rgba(11,99,255,0.03), transparent 40%), var(--bg);
+      color:#0f172a;
+      -webkit-font-smoothing:antialiased;
+      -moz-osx-font-smoothing:grayscale;
+    }
+    .container{
+      max-width:1100px;
+      margin:36px auto;
+      padding:28px;
+      display:grid;
+      grid-template-columns: 420px 1fr;
+      gap:20px;
+    }
+    header{
+      grid-column:1/-1;
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      margin-bottom:6px;
+    }
+    h1{ font-size:20px; margin:0;}
+    .muted{ color:var(--muted); font-size:13px;}
+    .card{
+      background:var(--card);
+      border-radius:10px;
+      box-shadow: 0 6px 18px rgba(15,23,42,0.06);
+      padding:18px;
+    }
+    .uploader{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:10px;
+      margin-top:12px;
+    }
+    .drop{
+      border-radius:8px;
+      background:var(--glass);
+      border:2px dashed rgba(11,99,255,0.07);
+      min-height:150px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      flex-direction:column;
+      gap:8px;
+      padding:10px;
+      text-align:center;
+      cursor:pointer;
+    }
+    .drop input{ display:none;}
+    .img-preview{
+      max-width:100%;
+      max-height:180px;
+      border-radius:6px;
+      box-shadow: 0 4px 10px rgba(2,6,23,0.04);
+      object-fit:contain;
+      background:white;
+    }
+    label.switch {
+      position: relative; display:inline-block; width:46px; height:26px;
+    }
+    label.switch input{ display:none;}
+    .slider {
+      position:absolute; cursor:pointer; top:0; left:0; right:0; bottom:0;
+      background:#ddd; transition: .2s; border-radius:999px;
+    }
+    .slider:before{
+      position:absolute; content:""; height:20px; width:20px; left:3px; top:3px; background:white; border-radius:50%;
+      transition: .2s;
+    }
+    input:checked + .slider{ background:var(--accent);}
+    input:checked + .slider:before{ transform:translateX(20px); }
+    .controls{ display:flex; gap:8px; align-items:center; margin-top:12px; flex-wrap:wrap;}
+    button{
+      border:0; padding:10px 14px; border-radius:8px; cursor:pointer; font-weight:600;
+    }
+    button.primary{ background:var(--accent); color:white; box-shadow: 0 6px 14px rgba(11,99,255,0.12);}
+    button.ghost{ background:transparent; color:var(--accent-2); border:1px solid rgba(11,99,255,0.08);}
+    .result{
+      display:flex; gap:12px; align-items:center; margin-top:12px;
+    }
+    .score{
+      background:linear-gradient(90deg,#eaf2ff,#f9fbff);
+      padding:14px; border-radius:8px; min-width:160px; text-align:center;
+      box-shadow: 0 6px 18px rgba(2,6,23,0.03);
+    }
+    .score strong{ display:block; font-size:22px; margin-top:6px;}
+    .log{ font-family:monospace; font-size:12px; color:var(--muted); padding-top:8px;}
+    .pairs{ margin-top:12px; display:flex; gap:8px; flex-wrap:wrap;}
+    .pairCard{ display:flex; gap:8px; align-items:center; padding:8px 10px; border-radius:8px; background:var(--glass);}
+    .footer{ grid-column:1/-1; margin-top:18px; color:var(--muted); font-size:13px; text-align:center;}
+    .small{ font-size:13px; color:var(--muted); margin-top:8px;}
+    /* responsive */
+    @media (max-width:980px){
+      .container{ grid-template-columns:1fr; padding:16px;}
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div>
+        <h1>Siamese Image Similarity — Client-side Demo</h1>
+        <div class="muted">Shared MobileNet feature extractor + small trainable head. Runs in-browser (works on GitHub Pages).</div>
+      </div>
+      <div class="muted">Built with TensorFlow.js • No server</div>
+    </header>
+
+    <!-- Left column: inputs and training -->
+    <div class="card">
+      <h3>Images</h3>
+      <div class="uploader">
+        <div class="drop" id="dropA" title="Click or drop image A">
+          <input id="fileA" type="file" accept="image/*"/>
+          <div id="previewAwrap">
+            <img id="previewA" class="img-preview" alt="image A preview" />
+          </div>
+          <div class="small">Image A — Click to upload or drop here</div>
+        </div>
+
+        <div class="drop" id="dropB" title="Click or drop image B">
+          <input id="fileB" type="file" accept="image/*"/>
+          <div id="previewBwrap">
+            <img id="previewB" class="img-preview" alt="image B preview" />
+          </div>
+          <div class="small">Image B — Click to upload or drop here</div>
+        </div>
+      </div>
+
+      <div class="controls">
+        <button id="compareBtn" class="primary">Compare</button>
+        <button id="addPairBtn" class="ghost">Add Pair to Training Set</button>
+        <button id="trainBtn" class="ghost">Train (few-shot)</button>
+        <button id="downloadHeadBtn" class="ghost">Download Head</button>
+
+        <div style="margin-left:auto;">
+          <label class="switch" title="Label for the pair (similar = ON)">
+            <input id="pairLabel" type="checkbox"/>
+            <span class="slider"></span>
+          </label>
+          <div class="small" style="display:inline-block; margin-left:8px;">Label: similar</div>
+        </div>
+      </div>
+
+      <div class="small">Notes: MobileNet is used as the shared (siamese) backbone. A small head (trained in-browser) can be trained on example pairs you add. Training is optional — you can use raw embeddings + cosine distance by default.</div>
+
+      <div class="pairs" id="pairsList" aria-live="polite"></div>
+    </div>
+
+    <!-- Right column: model status and results -->
+    <div class="card" id="rightCard">
+      <h3>Status & Results</h3>
+      <div id="status" class="muted">Loading MobileNet model — please wait...</div>
+
+      <div class="result">
+        <div class="score">
+          <div class="muted">Cosine similarity</div>
+          <strong id="cosineScore">—</strong>
+          <div class="muted small">1.0 = identical • 0.0 = orthogonal</div>
+        </div>
+
+        <div class="score">
+          <div class="muted">Euclidean distance</div>
+          <strong id="euclidScore">—</strong>
+          <div class="muted small">Lower = more similar</div>
+        </div>
+
+        <div style="flex:1;">
+          <div class="muted">Head prediction (if trained)</div>
+          <div id="headPred" style="font-weight:700; font-size:18px; margin-top:6px;">—</div>
+          <div class="log" id="logArea"></div>
+        </div>
+      </div>
+
+      <hr style="margin:12px 0;" />
+      <div>
+        <h4 style="margin:0 0 8px 0;">Model Controls</h4>
+        <div class="small">Embedding size (head output): <strong id="embedSize">128</strong></div>
+        <div class="small" style="margin-top:8px;">
+          <label><input id="normalizeEmb" type="checkbox" checked /> L2-normalize embeddings (recommended)</label>
+        </div>
+
+        <div style="margin-top:12px;">
+          <label class="small">Training settings</label>
+          <div style="display:flex; gap:8px; margin-top:6px;">
+            <input id="epochs" type="number" value="15" min="1" style="width:80px; padding:8px; border-radius:6px; border:1px solid #e6eefc;" />
+            <input id="lr" type="number" value="0.001" step="0.0005" min="0.0001" style="width:120px; padding:8px; border-radius:6px; border:1px solid #e6eefc;" />
+            <div class="muted" style="align-self:center;">epochs • lr</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer card">
+      <div><strong>How it works</strong> — MobileNet (shared backbone) converts images into fixed-length feature vectors. The two feature vectors are compared (cosine/euclidean). Optionally a small head can be trained on labeled pairs to predict similarity.</div>
+      <div class="muted" style="margin-top:8px;">Tip: Start by comparing images. If you have labeled pairs (similar/different), add a few (10–100) and train the head for improved domain-specific performance.</div>
+    </div>
+
+  </div>
+
+<script>
+(async function(){
+  // UI elements
+  const fileA = document.getElementById('fileA');
+  const fileB = document.getElementById('fileB');
+  const previewA = document.getElementById('previewA');
+  const previewB = document.getElementById('previewB');
+  const dropA = document.getElementById('dropA');
+  const dropB = document.getElementById('dropB');
+  const compareBtn = document.getElementById('compareBtn');
+  const addPairBtn = document.getElementById('addPairBtn');
+  const trainBtn = document.getElementById('trainBtn');
+  const pairsList = document.getElementById('pairsList');
+  const status = document.getElementById('status');
+  const cosineScore = document.getElementById('cosineScore');
+  const euclidScore = document.getElementById('euclidScore');
+  const headPred = document.getElementById('headPred');
+  const logArea = document.getElementById('logArea');
+  const pairLabel = document.getElementById('pairLabel');
+  const embedSizeEl = document.getElementById('embedSize');
+  const normalizeEmb = document.getElementById('normalizeEmb');
+  const epochsEl = document.getElementById('epochs');
+  const lrEl = document.getElementById('lr');
+  const downloadHeadBtn = document.getElementById('downloadHeadBtn');
+
+  // state
+  let mobilenetModel = null;
+  let headModel = null; // trainable head (classifier)
+  let pairs = []; // {a:ImageDataURL, b:ImageDataURL, label:0/1}
+  let embeddingsCache = {}; // cache embeddings by dataURL to avoid repeats
+  const HEAD_EMBED_SIZE = 128;
+  embedSizeEl.textContent = HEAD_EMBED_SIZE;
+
+  // helpers: drag & drop
+  function setupDrop(dropEl, inputEl, previewEl){
+    dropEl.addEventListener('click', ()=> inputEl.click());
+    inputEl.addEventListener('change', e=>{
+      const f = e.target.files[0];
+      if(!f) return;
+      const url = URL.createObjectURL(f);
+      previewEl.src = url;
+      previewEl.style.display = 'block';
+      previewEl.onload = ()=> URL.revokeObjectURL(url);
+    });
+    // drag/drop
+    ['dragenter','dragover'].forEach(ev=>{
+      dropEl.addEventListener(ev, (e)=> { e.preventDefault(); dropEl.style.borderColor = 'rgba(11,99,255,0.18)'; });
+    });
+    ['dragleave','drop'].forEach(ev=>{
+      dropEl.addEventListener(ev, (e)=> { e.preventDefault(); dropEl.style.borderColor = ''; });
+    });
+    dropEl.addEventListener('drop', (e)=>{
+      e.preventDefault();
+      const f = (e.dataTransfer.files && e.dataTransfer.files[0]);
+      if(!f) return;
+      const url = URL.createObjectURL(f);
+      previewEl.src = url;
+      previewEl.style.display = 'block';
+      previewEl.onload = ()=> URL.revokeObjectURL(url);
+      inputEl.files = e.dataTransfer.files; // update file input
+    });
+  }
+  setupDrop(dropA, fileA, previewA);
+  setupDrop(dropB, fileB, previewB);
+
+  // load MobileNet
+  async function loadMobileNet(){
+    status.textContent = 'Loading MobileNet (feature extractor) ...';
+    // Use version 2.1 mobilenet from CDN (already loaded via script tag)
+    mobilenetModel = await mobilenet.load({version:2, alpha:1.0});
+    status.textContent = 'MobileNet loaded. Ready.';
+  }
+
+  await loadMobileNet();
+
+  // utility to get tensor from image element with proper resizing
+  function imgToTensor(imgEl){
+    // mobilenet expects 224x224 input
+    const t = tf.browser.fromPixels(imgEl).toFloat();
+    // Resize with tf.image.resizeBilinear
+    const resized = tf.image.resizeBilinear(t, [224,224]);
+    // Normalize to [-1,1] like MobileNet expects
+    const offset = tf.scalar(127.5);
+    const normalized = resized.sub(offset).div(offset);
+    const batched = normalized.expandDims(0);
+    return batched;
+  }
+
+  // compute embedding for an image element (cached by src)
+  async function getEmbeddingFromImgEl(imgEl){
+    if(!imgEl || !imgEl.src) throw new Error('No image provided');
+    const key = imgEl.src;
+    if(embeddingsCache[key]) return embeddingsCache[key];
+    // convert to tensor and run mobilenet.infer to get features
+    const input = imgToTensor(imgEl);
+    // mobilenet.infer(image, embedding=true) returns activations from the final conv layer
+    // We call infer with 'conv_preds' behaviour: in this API, second arg true returns an embedding
+    let feat = mobilenetModel.infer(input, true); // returns 2D tensor shape [1, ?]
+    // Map to a smaller head embedding vector using a lightweight dense projection (not trained unless user trains)
+    // We'll create a simple "projection" layer here (random if no trained head) - but better: use headModel if present
+    if(headModel){
+      // headModel expects shape [batch, featDim] and returns [batch, HEAD_EMBED_SIZE] or prediction
+      const projected = headModel.predict(feat);
+      // If headModel is classifier producing scalar, we'll handle that elsewhere — but here assume projection
+      feat.dispose();
+      input.dispose();
+      embeddingsCache[key] = projected; // tensor kept in cache (dispose carefully later)
+      return projected;
+    } else {
+      // Without a trained head, we'll perform a fixed projection (PCA-like via linear layer with random weights is not good).
+      // Instead we will reduce dimension via global average pooling if needed, but mobilenet.infer(..., true) already returns a compact vector.
+      embeddingsCache[key] = feat; // keep tensor
+      input.dispose();
+      return feat;
+    }
+  }
+
+  // compute raw embeddings (not tf.Tensor) as Float32Array for distance computations
+  async function getEmbeddingArray(imgEl){
+    const embTensor = await getEmbeddingFromImgEl(imgEl); // tf.Tensor [1,d]
+    const embArr = await embTensor.data(); // typed array
+    return Array.from(embArr);
+  }
+
+  // normalization utilities
+  function l2NormalizeArray(arr){
+    const sumSq = arr.reduce((s,v)=>s+v*v,0);
+    const norm = Math.sqrt(sumSq) || 1;
+    return arr.map(v=>v/norm);
+  }
+  function cosineSimilarity(a,b){
+    if(a.length !== b.length) throw new Error('dim mismatch');
+    let dot=0, na=0, nb=0;
+    for(let i=0;i<a.length;i++){ dot += a[i]*b[i]; na += a[i]*a[i]; nb += b[i]*b[i]; }
+    const denom = Math.sqrt(na)*Math.sqrt(nb) || 1;
+    return dot/denom;
+  }
+  function euclideanDistance(a,b){
+    let s=0;
+    for(let i=0;i<a.length;i++){ const d=a[i]-b[i]; s+=d*d; }
+    return Math.sqrt(s);
+  }
+
+  // Compare action
+  compareBtn.addEventListener('click', async ()=>{
+    try{
+      if(!previewA.src || !previewB.src){ status.textContent = 'Please upload both images to compare.'; return; }
+      status.textContent = 'Computing embeddings and similarity...';
+      // get arrays
+      let aArr = await getEmbeddingArray(previewA);
+      let bArr = await getEmbeddingArray(previewB);
+
+      if(normalizeEmb.checked){
+        aArr = l2NormalizeArray(aArr);
+        bArr = l2NormalizeArray(bArr);
+      }
+      const cos = cosineSimilarity(aArr,bArr);
+      const euc = euclideanDistance(aArr,bArr);
+      cosineScore.textContent = cos.toFixed(4);
+      euclidScore.textContent = euc.toFixed(4);
+
+      // If we have a trained classifier head (binary), we can also show its prediction
+      if(headModel && headModel.outputs && headModel.outputs.length){
+        // Determine if the headModel is a classifier expecting pairwise input:
+        // We trained a small siamese *pair* classifier if user trained. To keep things simple, we also provide
+        // a fallback: if headModel takes single embedding and outputs scalar, we compute prediction on concatenated abs diff.
+        // For the demo, we'll call predictPairIfPossible
+        const pred = await predictPairWithHead(previewA, previewB);
+        headPred.textContent = pred.label + ' (' + pred.prob.toFixed(3) + ')';
+      } else {
+        headPred.textContent = 'Head not trained';
+      }
+
+      status.textContent = 'Done.';
+    }catch(err){
+      status.textContent = 'Error: ' + err.message;
+      console.error(err);
+    }
+  });
+
+  // TRAINING SET HANDLING
+  addPairBtn.addEventListener('click', ()=>{
+    if(!previewA.src || !previewB.src){ status.textContent = 'Please upload both images to add pair.'; return; }
+    const label = pairLabel.checked ? 1 : 0;
+    const pair = {a: previewA.src, b: previewB.src, label};
+    pairs.push(pair);
+    renderPairs();
+  });
+
+  function renderPairs(){
+    pairsList.innerHTML = '';
+    pairs.forEach((p, idx)=>{
+      const el = document.createElement('div');
+      el.className = 'pairCard';
+      el.innerHTML = `
+        <img src="${p.a}" style="width:48px;height:48px;border-radius:6px;object-fit:cover;" />
+        <div style="display:grid;">
+          <div style="font-weight:700">${p.label? 'Similar':'Different'}</div>
+          <div style="font-size:12px;color:var(--muted)">Pair #${idx+1}</div>
+        </div>
+        <button data-idx="${idx}" style="margin-left:auto;background:transparent;border:0;color:var(--muted);cursor:pointer">Remove</button>
+      `;
+      el.querySelector('button').addEventListener('click', (e)=>{
+        const i = +e.target.getAttribute('data-idx');
+        pairs.splice(i,1);
+        // dispose associated cached embeddings if present? we keep it simple
+        renderPairs();
+      });
+      pairsList.appendChild(el);
+    });
+    if(pairs.length===0) pairsList.innerHTML = '<div class="small muted">No pairs yet. Add some pairs to train the head (optional).</div>';
+  }
+  renderPairs();
+
+  // TRAIN (few-shot) - we'll train a small classifier that takes |emb_a - emb_b| and predicts similar/different
+  trainBtn.addEventListener('click', async ()=>{
+    if(pairs.length < 4){ status.textContent = 'Add at least 4 labeled pairs (recommended 10+) before training.'; return; }
+    status.textContent = 'Preparing training data...';
+    log('Extracting embeddings for pairs — this may take time (runs in-browser).');
+
+    // Build X and y arrays
+    const xs = [];
+    const ys = [];
+    for(let i=0;i<pairs.length;i++){
+      const p = pairs[i];
+      // ensure both images loaded as preview-like elements for embedding extraction
+      const imgA = await srcToImageEl(p.a);
+      const imgB = await srcToImageEl(p.b);
+      const aArr = await getEmbeddingArray(imgA);
+      const bArr = await getEmbeddingArray(imgB);
+      // optionally normalize
+      const aNorm = normalizeEmb.checked ? l2NormalizeArray(aArr) : aArr;
+      const bNorm = normalizeEmb.checked ? l2NormalizeArray(bArr) : bArr;
+      const diff = aNorm.map((v,i)=> Math.abs(v - bNorm[i]) );
+      xs.push(diff);
+      ys.push(p.label);
+      imgA.remove(); imgB.remove();
+    }
+
+    status.textContent = 'Building classifier and training...';
+    log('Training classifier on ' + xs.length + ' pairs.');
+
+    // Convert to tensors
+    const xT = tf.tensor2d(xs);
+    const yT = tf.tensor2d(ys, [ys.length,1]);
+
+    // Create a small dense classifier (input dim = embedding dim)
+    const inputDim = xT.shape[1];
+    const model = tf.sequential();
+    model.add(tf.layers.dense({inputShape:[inputDim], units:256, activation:'relu'}));
+    model.add(tf.layers.dropout({rate:0.25}));
+    model.add(tf.layers.dense({units:64, activation:'relu'}));
+    model.add(tf.layers.dense({units:1, activation:'sigmoid'}));
+    const lr = parseFloat(lrEl.value) || 0.001;
+    model.compile({optimizer: tf.train.adam(lr), loss:'binaryCrossentropy', metrics:['accuracy']});
+
+    const epochs = Math.max(1, parseInt(epochsEl.value) || 10);
+    await model.fit(xT, yT, {
+      epochs,
+      batchSize: Math.min(16, xs.length),
+      callbacks: {
+        onEpochEnd: async (epoch, logs)=>{
+          log(`Epoch ${epoch+1}/${epochs}: loss=${logs.loss.toFixed(4)} acc=${(logs.acc||logs.accuracy||0).toFixed(3)}`);
+        }
+      }
+    });
+
+    // Save headModel (the classifier)
+    headModel = model; // used for pair prediction
+    status.textContent = 'Training finished. Head model ready.';
+    log('Training complete. You can now compare images and see head prediction.');
+    xT.dispose(); yT.dispose();
+  });
+
+  // convert image data URL to an image element (not added to DOM)
+  function srcToImageEl(src){
+    return new Promise((res,rej)=>{
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = ()=> res(img);
+      img.onerror = (e)=> rej(e);
+      img.src = src;
+    });
+  }
+
+  // prediction with trained head: prepare input vector = abs(a - b)
+  async function predictPairWithHead(imgElA, imgElB){
+    if(!headModel) return {label:'no-head', prob:0};
+    // get embeddings arrays (from cache ideally)
+    const aArr = await getEmbeddingArray(imgElA);
+    const bArr = await getEmbeddingArray(imgElB);
+    const aNorm = normalizeEmb.checked ? l2NormalizeArray(aArr) : aArr;
+    const bNorm = normalizeEmb.checked ? l2NormalizeArray(bArr) : bArr;
+    // ensure same length
+    const diff = aNorm.map((v,i)=> Math.abs(v - bNorm[i]) );
+    const t = tf.tensor2d([diff]);
+    const out = await headModel.predict(t);
+    // prediction is single sigmoid output
+    const prob = (await out.data())[0];
+    t.dispose(); out.dispose();
+    return {label: prob > 0.5 ? 'Similar':'Different', prob};
+  }
+
+  // Download head (if trained)
+  downloadHeadBtn.addEventListener('click', async ()=>{
+    if(!headModel){ status.textContent = 'No head trained yet.'; return; }
+    status.textContent = 'Preparing download...';
+    // download model to user files
+    await headModel.save('downloads://siamese-head');
+    status.textContent = 'Download triggered.';
+  });
+
+  // small logging
+  function log(msg){
+    const time = new Date().toLocaleTimeString();
+    logArea.textContent = `${time} — ${msg}\n` + logArea.textContent;
+  }
+
+  // Clean up cached tensors when user navigates away
+  window.addEventListener('beforeunload', ()=>{
+    for(const k in embeddingsCache){
+      const t = embeddingsCache[k];
+      try{ t.dispose(); }catch(e){}
+    }
+  });
+
+  // Also present quick sample images for users who can't upload (optional)
+  // (We embed two tiny sample images as base64 small placeholders)
+  // Create sample button on status area
+  const sampleBtn = document.createElement('button');
+  sampleBtn.textContent = 'Load sample images';
+  sampleBtn.className = 'ghost';
+  sampleBtn.style.marginLeft = '8px';
+  status.parentNode.appendChild(sampleBtn);
+  sampleBtn.addEventListener('click', ()=>{
+    // Two simple sample images (tiny). For better demos replace with nicer images.
+    const a = 'data:image/svg+xml;base64,' + btoa(`<svg xmlns='http://www.w3.org/2000/svg' width='400' height='300'><rect width='100%' height='100%' fill='#eef6ff'/><g font-family='sans-serif'><text x='50%' y='50%' fill='#0b63ff' font-size='28' text-anchor='middle' dominant-baseline='middle'>Sample A</text></g></svg>`);
+    const b = 'data:image/svg+xml;base64,' + btoa(`<svg xmlns='http://www.w3.org/2000/svg' width='400' height='300'><rect width='100%' height='100%' fill='#fff0f6'/><g font-family='sans-serif'><text x='50%' y='50%' fill='#c0232b' font-size='28' text-anchor='middle' dominant-baseline='middle'>Sample B</text></g></svg>`);
+    previewA.src = a; previewB.src = b;
+    previewA.style.display = 'block'; previewB.style.display = 'block';
+  });
+
+  // friendly initial message
+  status.textContent = 'Ready. Upload two images, then Compare. Use "Add Pair" + Train to customize a head for your domain.';
+})();
+</script>
+</body>
+</html>
